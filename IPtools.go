@@ -9,16 +9,21 @@ import (
 )
 
 func RestrictIP(addr string, subnet bool) error{
-	gatewayIP, broadcastIP, _, err := IPRange(addr)
+	ip := strings.Split(addr, "/")[0]
+	err0 := net.ParseIP(ip)
+	if err0 == nil {
+		return errors.New("ip error")
+	}
+	gatewayIP, broadcastIP, err := IPRange(addr)
 	if err != nil {
 		return err
 	}
-	_, netCIDR, _ := net.ParseCIDR(addr)
-
-
+	fmt.Println(gatewayIP)
+	fmt.Println(broadcastIP)
 	return nil
 }
 
+//fill zero
 func completeIPv6(addr string) (ip string) {
 	ipv6 := strings.Split(addr, ":")
 	aloneBit := make([]string, 2)
@@ -41,69 +46,77 @@ func completeIPv6(addr string) (ip string) {
 	return address
 }
 
+//suffix of broadcastIP for IPv4
+func completeDefIPv4(n int) (def string) {
+	middle := make([]string, 0)
+	for i:=0; i<n; i++ {
+		middle = append(middle, "255")
+	}
+	temp := strings.Join(middle, ".")
+	return temp
+}
+
+//calculate range of the IP net
+//get gatewayIP and broadcastIP
 func IPRange(addr string) (gatewayIP, broadcastIP string, err error){
+	if !strings.Contains(addr, "/") {
+		return "", "", errors.New("please input cidr")
+	}
+	_, netCIDR, _ := net.ParseCIDR(addr)
+	netNum, _ := strconv.Atoi(strings.Split(netCIDR.String(), "/")[1])
 	if addr != "" && strings.Contains(addr, ".") {
-		var i int
-		_, netCIDR, _ := net.ParseCIDR(addr)
 		netAddr := strings.Split(netCIDR.String(), "/")[0]
-		netNum, _ := strconv.Atoi(strings.Split(netCIDR.String(), "/")[1])
+		temp := make([]string, 0)
 		GatewayIP := strings.Split(netAddr, ".")
 		BroadcastIP := strings.Split(netAddr, ".")
-		temp, _ := strconv.Atoi(GatewayIP[3])
-		GatewayIP[3] = strconv.Itoa(temp + 1)
-		if netNum >= 24 && netNum < 32 {
-			i = 3
-			BroadcastIP[i] = "255"
-			return strings.Join(GatewayIP, "."), strings.Join(BroadcastIP, "."), nil
-		}else if netNum >= 16 && netNum < 24 {
-			i = 2
-			BroadcastIP[2] = "255"
-			BroadcastIP[3] = "255"
-			return strings.Join(GatewayIP, "."), strings.Join(BroadcastIP, "."), nil
-		}else if netNum >= 8 && netNum <16 {
-			i = 1
-			BroadcastIP[1] = "255"
-			BroadcastIP[2] = "255"
-			BroadcastIP[3] = "255"
-			return 	strings.Join(GatewayIP, "."), strings.Join(BroadcastIP, "."), nil
-		}else if netNum > 0 && netNum < 8 {
-			i = 0
-			BroadcastIP[0] = "255"
-			BroadcastIP[1] = "255"
-			BroadcastIP[2] = "255"
-			BroadcastIP[3] = "255"
-			return 	strings.Join(GatewayIP, "."), strings.Join(BroadcastIP, "."), nil
-		}else {
-			return "", "", errors.New("ip error")
+		m := netNum / 8
+		n := netNum % 8
+		if n != 0 {
+			add := calculateNetSeg(addr, n)
+			GatewayIP[m] = add
 		}
-
+		x, _ := strconv.Atoi(GatewayIP[3])
+		x++
+		GatewayIP[3] = strconv.Itoa(x)
+		gatewayIP := strings.Join(GatewayIP, ".")
+		for i:=0; i<m; i++ {
+			temp = append(temp, BroadcastIP[i])
+		}
+		t := 4 - m
+		middle := completeDefIPv4(t)
+		temp = append(temp, middle)
+		broadcastIP := strings.Join(temp, ".")
+		return gatewayIP, broadcastIP, nil
 	}
 	if addr != "" && strings.Contains(addr, ":") {
-		_, netCIDR, _ := net.ParseCIDR(addr)
 		ipv6, _ := transformIPv6(strings.Split(netCIDR.String(), "/")[0])
 		temp := make([]string, 0)
-		var broadcastIP string
 		n := strings.Split(ipv6, ":")
+		p := netNum / 16
+		q := netNum % 16
+		if q != 0 {
+			add := calculateNetSeg(addr, q)
+			n[p] = add
+		}
 		x, _ := strconv.ParseInt(n[7], 16, 32)
 		x++
 		h := fmt.Sprintf("%x", x)
 		n[7] = h
 		gatewayIP := strings.Join(n, ":")
-		netSeg, _ := strconv.Atoi(strings.Split(addr, "/")[1])
-		p := netSeg / 16
-		//q := netSeg % 16
+
 		for i:=0; i<p; i++ {
 			temp = append(temp, n[i])
 		}
 		t := 8 - p
 		middle := completeDef(t, "f")
 		temp = append(temp, middle)
-		broadcastIP = strings.Join(temp, ":")
+		broadcastIP := strings.Join(temp, ":")
 		return gatewayIP, broadcastIP, nil
 	}
 	return "", "", errors.New("ip error")
 }
 
+//show integral IPv6
 func transformIPv6(addr string) (ip string, err error) {
 	var address string
 	if strings.Contains(addr, "::") && addr != "" {
@@ -126,6 +139,8 @@ func transformIPv6(addr string) (ip string, err error) {
 	return address, nil
 }
 
+//if flag = 0, then return string to fill IPv6
+//if flag = f, then return suffix of broadcastIP
 func completeDef(x int, flag string) (def string) {
 	middle := make([]string, 0)
 	for i:=0; i<x; i++ {
@@ -139,6 +154,7 @@ func completeDef(x int, flag string) (def string) {
 	return temp
 }
 
+//merge the prefix and suffix of IPv6
 func merge(addr, add string) (ip string){
 	var address string
 	temp := make([]string, 0)
@@ -160,6 +176,40 @@ func merge(addr, add string) (ip string){
 	return address
 }
 
+func calculateNetSeg(addr string, x int) (netseg string) {
+	var t int
+	temp := make([]string, 0)
+	if strings.Contains(addr, ".") {
+		t = 8
+	}else if strings.Contains(addr, ":") {
+		t = 16
+	}
+	for i:=0; i<t; i++ {
+		temp = append(temp, "0")
+	}
+	for i:=0; i<x; i++ {
+		temp[i] = "1"
+	}
+	seg := strings.Join(temp, "")
+	segInt64, _ := strconv.ParseInt(seg, 2, 64)
+	if t == 8 {
+		segDeci := strconv.FormatInt(segInt64, 10)
+		return segDeci
+	}
+	if t == 16 {
+		segDeci := strconv.FormatInt(segInt64, 16)
+		return segDeci
+	}
+	return ""
+}
+
 func main() {
-	addr := "ff:67::0020/66"
+	addr := "2001::64/64"
+	ip, _ := transformIPv6(addr)
+	fmt.Println(ip)
+	/*_, netCIDR, _ := net.ParseCIDR(addr)
+	fmt.Println(netCIDR)
+	gatewayIP, broadcastIP, _ := IPRange(addr)
+	fmt.Println(gatewayIP)
+	fmt.Println(broadcastIP)*/
 }
