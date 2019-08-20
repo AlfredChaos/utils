@@ -8,18 +8,22 @@ import (
 	"strings"
 )
 
-func RestrictIP(addr string, subnet bool) error{
+func RestrictIP(addr string, wetherIsSubnet bool) error{
 	ip := strings.Split(addr, "/")[0]
 	err0 := net.ParseIP(ip)
 	if err0 == nil {
 		return errors.New("ip error")
 	}
-	gatewayIP, broadcastIP, err := IPRange(addr)
+	gatewayIP, broadcastIP, netCIDR, err := IPRange(addr)
 	if err != nil {
 		return err
 	}
-	fmt.Println(gatewayIP)
-	fmt.Println(broadcastIP)
+	if !wetherIsSubnet && ip == gatewayIP || ip == broadcastIP || ip == netCIDR {
+		return errors.New("the ip has been exclude")
+	}
+	if wetherIsSubnet && ip != netCIDR {
+		return errors.New("ip is not correct subnet")
+	}
 	return nil
 }
 
@@ -58,10 +62,11 @@ func completeDefIPv4(n int) (def string) {
 
 //calculate range of the IP net
 //get gatewayIP and broadcastIP
-func IPRange(addr string) (gatewayIP, broadcastIP string, err error){
+func IPRange(addr string) (gatewayIP, broadcastIP string, netSeg string, err error){
 	if !strings.Contains(addr, "/") {
-		return "", "", errors.New("please input cidr")
+		return "", "", "", errors.New("please input cidr")
 	}
+	var add string
 	_, netCIDR, _ := net.ParseCIDR(addr)
 	netNum, _ := strconv.Atoi(strings.Split(netCIDR.String(), "/")[1])
 	if addr != "" && strings.Contains(addr, ".") {
@@ -72,8 +77,11 @@ func IPRange(addr string) (gatewayIP, broadcastIP string, err error){
 		m := netNum / 8
 		n := netNum % 8
 		if n != 0 {
-			add := calculateNetSeg(addr, n)
-			GatewayIP[m] = add
+			add = calculateNetSeg(addr, n)
+			//GatewayIP[m] = add
+			if GatewayIP[m] != add {
+				return "", "", "", errors.New("ip is not host ip! ")
+			}
 		}
 		x, _ := strconv.Atoi(GatewayIP[3])
 		x++
@@ -86,7 +94,7 @@ func IPRange(addr string) (gatewayIP, broadcastIP string, err error){
 		middle := completeDefIPv4(t)
 		temp = append(temp, middle)
 		broadcastIP := strings.Join(temp, ".")
-		return gatewayIP, broadcastIP, nil
+		return gatewayIP, broadcastIP, netCIDR.String(), nil
 	}
 	if addr != "" && strings.Contains(addr, ":") {
 		ipv6, _ := transformIPv6(strings.Split(netCIDR.String(), "/")[0])
@@ -95,8 +103,11 @@ func IPRange(addr string) (gatewayIP, broadcastIP string, err error){
 		p := netNum / 16
 		q := netNum % 16
 		if q != 0 {
-			add := calculateNetSeg(addr, q)
-			n[p] = add
+			add = calculateNetSeg(addr, q)
+			//n[p] = add
+			if n[p] != add {
+				return "", "", "", errors.New("ip is not host ip! ")
+			}
 		}
 		x, _ := strconv.ParseInt(n[7], 16, 32)
 		x++
@@ -111,9 +122,9 @@ func IPRange(addr string) (gatewayIP, broadcastIP string, err error){
 		middle := completeDef(t, "f")
 		temp = append(temp, middle)
 		broadcastIP := strings.Join(temp, ":")
-		return gatewayIP, broadcastIP, nil
+		return gatewayIP, broadcastIP, netCIDR.String(), nil
 	}
-	return "", "", errors.New("ip error")
+	return "", "", "", errors.New("ip error")
 }
 
 //show integral IPv6
@@ -204,12 +215,11 @@ func calculateNetSeg(addr string, x int) (netseg string) {
 }
 
 func main() {
-	addr := "2001::64/64"
-	ip, _ := transformIPv6(addr)
-	fmt.Println(ip)
-	/*_, netCIDR, _ := net.ParseCIDR(addr)
-	fmt.Println(netCIDR)
-	gatewayIP, broadcastIP, _ := IPRange(addr)
-	fmt.Println(gatewayIP)
-	fmt.Println(broadcastIP)*/
+	addr := "00ff::12/125"
+	err := RestrictIP(addr, false)
+	if err != nil {
+		fmt.Println(err)
+	}else {
+		fmt.Println("you have a correct ip")
+	}
 }
