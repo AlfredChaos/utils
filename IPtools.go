@@ -9,6 +9,9 @@ import (
 )
 
 func RestrictIP(addr string, wetherIsSubnet bool) error{
+	if addr == "" {
+		return errors.New("null parameter")
+	}
 	ip := strings.Split(addr, "/")[0]
 	err0 := net.ParseIP(ip)
 	if err0 == nil {
@@ -215,7 +218,7 @@ func calculateNetSeg(addr string, x int) (netseg string) {
 }
 
 func main() {
-	addr := "00ff::12/125"
+	addr := "10.30.12.129/25"
 	err := RestrictIP(addr, false)
 	if err != nil {
 		fmt.Println(err)
