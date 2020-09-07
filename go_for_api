@@ -1,0 +1,101 @@
+package common
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"strings"
+)
+
+func SimpleGet(apiURL string, params url.Values) (rs []byte, err error) {
+	Url, err := url.Parse(apiURL)
+	if err != nil{
+		fmt.Printf("resolve url error: %v", err)
+		return nil, err
+	}
+
+	Url.RawQuery = params.Encode()
+	resp, err := http.Get(Url.String())
+	if err != nil {
+		fmt.Printf("response error: %v", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return ioutil.ReadAll(resp.Body)
+}
+
+func SimplePost(apiURL string, params url.Values) (rs []byte, err error) {
+	resp, err := http.PostForm(apiURL, params)
+	if err != nil {
+		return nil,err
+	}
+	defer resp.Body.Close()
+	return ioutil.ReadAll(resp.Body)
+}
+
+func post(client *http.Client, apiURL string, obj map[string]interface{}) (resp []byte, err error) {
+	byt, err := json.Marshal(&obj)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader(string(byt)))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	return ioutil.ReadAll(response.Body)
+}
+
+func Get(client *http.Client, apiURL string, params url.Values) (resp []byte, err error) {
+	uri, err := url.Parse(apiURL)
+	if err != nil {
+		return nil, err
+	}
+	if params != nil {
+		values := uri.Query()
+		if values != nil {
+			for k, v := range values {
+				params[k] = v
+			}
+		}
+		uri.RawQuery = params.Encode()
+	}
+	req, err := http.NewRequest("GET", uri.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	return ioutil.ReadAll(response.Body)
+}
+
+func Post(client *http.Client, obj map[string]interface{}, URL_PATH string) (*map[string]interface{}, error) {
+	data, err := post(client, URL_PATH, obj)
+	if err != nil {
+		return nil, err
+	}
+	var response map[string]interface{}
+	err = json.Unmarshal(data, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	if response["code"].(float64) != 200 {
+		return nil, fmt.Errorf("failed:\r\n%v", response)
+	}
+	fmt.Println(response)
+	fmt.Println()
+	return &response, nil
+}
